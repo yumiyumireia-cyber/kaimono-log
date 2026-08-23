@@ -191,6 +191,65 @@ svg{flex:none}
   border-color:var(--blue-deep);color:var(--on-blue);font-weight:700;
 }
 
+/* ---- まとめて追加ボタン ---- */
+.btn-bulk{
+  border:1px solid var(--blue);border-radius:999px;
+  background:var(--card);color:var(--blue);
+  padding:13px 20px;font-weight:700;font-size:16px;
+  display:inline-flex;align-items:center;gap:8px;box-shadow:var(--shadow);
+}
+.btn-bulk:hover{background:var(--blue-tint)}
+
+/* ---- 未入力のお知らせ（さりげなく） ---- */
+.todo{
+  width:100%;border:1px dashed var(--blue);background:var(--card);
+  border-radius:var(--r-inner);padding:14px 16px;margin-top:16px;
+  display:flex;align-items:center;gap:10px;justify-content:center;
+  color:var(--blue);font-weight:700;font-size:16px;box-shadow:var(--shadow);
+}
+.todo[hidden]{display:none}
+
+/* ---- 選択肢のボタン（店・カテゴリ） ---- */
+.picker{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
+.picker button{
+  border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+  border-radius:999px;padding:8px 15px;font-size:15px;
+}
+.picker button[aria-pressed="true"]{background:var(--blue-tint);border-color:var(--blue);color:var(--navy);font-weight:700}
+
+/* ---- まとめて追加のサムネ ---- */
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.thumbs .t{position:relative;width:74px;height:74px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.thumbs .t img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .t button{
+  position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;
+  border:none;background:rgba(15,45,80,.72);color:#fff;font-size:13px;line-height:1;
+  display:grid;place-items:center;padding:0;
+}
+.rprev{margin-top:8px}
+.rprev img{max-width:150px;border-radius:12px;border:1px solid var(--line);display:block}
+
+/* ---- まとめて入力 ---- */
+.fillrows{display:flex;flex-direction:column;gap:14px}
+.fillrow{display:grid;grid-template-columns:76px 1fr;gap:12px;align-items:center}
+.fthumb{padding:0;border:none;background:none;width:76px;height:76px}
+.fthumb img,.fthumb .no{
+  width:76px;height:76px;border-radius:14px;object-fit:cover;display:block;
+  background:var(--card-soft);border:1px solid var(--line-soft);
+}
+.fthumb .no{display:grid;place-items:center;color:var(--ink-faint)}
+.fcol{display:flex;flex-direction:column;gap:7px;min-width:0}
+.fcol input{
+  border:1px solid var(--line);border-radius:12px;background:var(--card-soft);
+  padding:11px 13px;width:100%;font-size:17px;
+}
+.rbtn{
+  border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+  border-radius:999px;padding:9px 14px;font-size:14px;font-weight:700;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.progress{font-size:15px;color:var(--ink-soft);font-weight:700}
+
 /* ---- list ---- */
 .list{display:flex;flex-direction:column;gap:12px;margin-top:16px}
 .card{
@@ -221,6 +280,7 @@ svg{flex:none}
   display:block;width:100%;
 }
 .name{font-weight:700;font-size:21px;line-height:1.45;margin:0 0 5px;color:var(--navy);word-break:break-word}
+.name.unnamed{color:var(--ink-faint);font-weight:500}
 .meta{display:flex;flex-wrap:wrap;gap:5px 6px;margin-bottom:5px}
 .tag{
   font-size:15px;line-height:1.7;padding:3px 13px;border-radius:999px;
@@ -409,6 +469,10 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
   </div>
   <div class="addrow">
     <span class="offline" id="offlineBadge"><span class="dot"></span>オフライン中（そのまま使えます）</span>
+    <button class="btn-bulk" id="bulkBtn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5h3.4l1.5-2.3h8.2l1.5 2.3H21v10.2H3Z"/><circle cx="12" cy="13.4" r="3.6"/></svg>
+      まとめて
+    </button>
     <button class="btn-add" id="addBtn">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       追加
@@ -447,6 +511,11 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
       </select>
     </div>
   </div>
+
+  <button class="todo" id="todoBtn" hidden>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="M14.5 5.5 18.5 9.5"/></svg>
+    <span id="todoLabel">まとめて入力する</span>
+  </button>
 
   <div class="list" id="list"></div>
 
@@ -507,8 +576,8 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
       </div>
 
       <div class="field">
-        <label for="fName">名前 <span style="color:var(--danger)">*</span></label>
-        <input type="text" id="fName" required placeholder="レース糸 40番">
+        <label for="fName">名前</label>
+        <input type="text" id="fName" placeholder="あとで入れてもOK">
       </div>
 
       <div class="row2">
@@ -516,11 +585,13 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
           <label for="fStore">店</label>
           <input type="text" id="fStore" list="storeList" placeholder="ユザワヤ">
           <datalist id="storeList"></datalist>
+          <div class="picker" id="storePicker"></div>
         </div>
         <div class="field">
           <label for="fCat">カテゴリ</label>
           <input type="text" id="fCat" list="catList" placeholder="糸">
           <datalist id="catList"></datalist>
+          <div class="picker" id="catPicker"></div>
         </div>
       </div>
 
@@ -561,6 +632,76 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
   </form>
 </dialog>
 
+<dialog id="bulkDlg">
+  <form class="sheet" method="dialog">
+    <div class="sheet-head">
+      <h2>まとめて追加</h2>
+      <button type="button" class="x" id="bulkClose" aria-label="閉じる">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="form">
+      <div class="field">
+        <label>買ったものの写真</label>
+        <label class="pickbtn" for="bulkPhotos">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5h3.4l1.5-2.3h8.2l1.5 2.3H21v10.2H3Z"/><circle cx="12" cy="13.4" r="3.6"/></svg>
+          写真を選ぶ
+        </label>
+        <input type="file" id="bulkPhotos" accept="image/*" multiple class="vh">
+        <div class="thumbs" id="bulkThumbs"></div>
+        <p class="hint" id="bulkHint">アルバムからまとめて選べます。カメラで撮るときは、1枚撮るたびにもう一度押せば足していけます。</p>
+      </div>
+
+      <div class="field">
+        <label for="bStore">店（選んだ写真ぜんぶに入ります）</label>
+        <input type="text" id="bStore" placeholder="ユザワヤ">
+        <div class="picker" id="bStorePicker"></div>
+      </div>
+
+      <div class="field">
+        <label for="bCat">カテゴリ（空でもOK）</label>
+        <input type="text" id="bCat" placeholder="糸">
+        <div class="picker" id="bCatPicker"></div>
+      </div>
+
+      <div class="field">
+        <label>レシート（任意）</label>
+        <label class="pickbtn" for="bReceipt">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-1.6-3 1.6-3-1.6L6 21Z"/><path d="M9.5 8h5M9.5 12h5"/></svg>
+          レシートを撮る・選ぶ
+        </label>
+        <input type="file" id="bReceipt" accept="image/*" class="vh">
+        <div class="rprev" id="bReceiptPrev"></div>
+        <p class="hint">読み取りはしません。あとで自分で見返すための控えです。値段を入れるときに見比べられます。</p>
+      </div>
+
+      <p class="err" id="bErr" hidden></p>
+      <div class="actions">
+        <span class="progress" id="bulkProgress"></span>
+        <button type="button" class="btn-save" id="bulkSave">まとめて追加</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="fillDlg">
+  <form class="sheet" method="dialog">
+    <div class="sheet-head">
+      <h2 id="fillTitle">まとめて入力</h2>
+      <button type="button" class="x" id="fillClose" aria-label="閉じる">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="form">
+      <button type="button" class="mini" id="fillReceipt" hidden style="margin:0;align-self:flex-start">レシートを見る</button>
+      <div class="fillrows" id="fillRows"></div>
+      <div class="actions">
+        <button type="button" class="btn-save" id="fillSave">保存する</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="lb" aria-label="写真の拡大">
   <div class="lb-in" id="lbIn">
     <img id="lbImg" alt="登録した写真">
@@ -589,6 +730,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     basket: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18l-1.6 10.2A2.5 2.5 0 0 1 17 20.3H7A2.5 2.5 0 0 1 4.6 18.2Z"/><path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8"/></svg>',
     heart: '<svg width="18" height="18" viewBox="0 0 24 24" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z"/></svg>',
     zoom: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.3-3.3M11 8.4v5.2M8.4 11h5.2"/></svg>',
+    receipt: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-1.6-3 1.6-3-1.6L6 21Z"/><path d="M9.5 8h5M9.5 12h5"/></svg>',
     character: '<img class="ch" src="' + ART + '" alt="">'
   };
 
@@ -743,12 +885,12 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
   $("lbImg").addEventListener("click", function(){ $("lb").close(); });
 
   /* ---------- 写真を小さくする ---------- */
-  function shrink(file){
+  function shrink(file, maxSide, quality){
     return new Promise(function(resolve, reject){
       var url = URL.createObjectURL(file);
       var img = new Image();
       img.onload = function(){
-        var max = 1400;
+        var max = maxSide || 1400;
         var w = img.naturalWidth, h = img.naturalHeight;
         var s = Math.min(1, max / Math.max(w, h));
         var cv = document.createElement("canvas");
@@ -756,7 +898,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
         cv.height = Math.round(h * s);
         cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
         URL.revokeObjectURL(url);
-        cv.toBlob(function(b){ b ? resolve(b) : reject(new Error("変換できません")); }, "image/jpeg", 0.72);
+        cv.toBlob(function(b){ b ? resolve(b) : reject(new Error("変換できません")); }, "image/jpeg", quality || 0.72);
       };
       img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("読み込めません")); };
       img.src = url;
@@ -837,7 +979,8 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
           '<div class="cardtop">' +
             '<button class="thumb-btn" data-zoom="' + it.id + '"' + (it.photoId ? ' aria-label="写真を拡大"' : ' aria-hidden="true" tabindex="-1"') + '>' + thumb + '</button>' +
             '<button class="cardmain" data-edit="' + it.id + '">' +
-              '<h3 class="name">' + esc(it.name) + '</h3>' +
+              (it.name ? '<h3 class="name">' + esc(it.name) + '</h3>'
+                       : '<h3 class="name unnamed">名前なし</h3>') +
               (tags ? '<div class="meta">' + tags + '</div>' : "") +
               (nums ? '<div class="numbers">' + nums + '</div>' : "") +
               (it.memo ? '<p class="memo">' + esc(it.memo) + '</p>' : "") +
@@ -846,6 +989,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
           '<div class="cardfoot">' +
             '<button class="again-btn" data-again="' + it.id + '" aria-pressed="' + !!it.again + '">' +
               ICON.heart + 'また買う</button>' +
+            (it.receiptId ? '<button class="rbtn" data-receipt="' + it.receiptId + '">' + ICON.receipt + 'レシート</button>' : '') +
             '<span class="date">' + fmtDate(it.createdAt) + '</span>' +
           '</div>' +
         '</article>';
@@ -875,6 +1019,14 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
         if (save()) render();
       });
     });
+
+    Array.prototype.forEach.call(list.querySelectorAll("[data-receipt]"), function(b){
+      b.addEventListener("click", function(){ openLightboxById(b.dataset.receipt); });
+    });
+
+    var u = unfilled();
+    $("todoBtn").hidden = u.length === 0;
+    $("todoLabel").textContent = "まとめて入力する（" + u.length + "件）";
 
     updateUsage();
     $("storeList").innerHTML = uniq("store").map(function(v){ return '<option value="' + esc(v) + '">'; }).join("");
@@ -938,6 +1090,8 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     $("err").hidden = true;
     $("saveBtn").disabled = false;
     $("saveBtn").textContent = "保存する";
+    fillPicker($("storePicker"), uniq("store"), $("fStore"));
+    fillPicker($("catPicker"), uniq("cat"), $("fCat"));
     $("dlg").showModal();
     if (!it) setTimeout(function(){ $("fName").focus(); }, 50);
   }
@@ -988,8 +1142,8 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
 
   $("saveBtn").addEventListener("click", function(){
     var name = $("fName").value.trim();
-    if (!name){
-      $("err").textContent = "名前を入れてください。";
+    if (!name && !pendingBlob && !pendingPhotoId){
+      $("err").textContent = "名前か写真、どちらかは入れてください。";
       $("err").hidden = false;
       $("fName").focus();
       return;
@@ -1049,11 +1203,14 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     if (!confirm("この記録を削除します。よろしいですか？")) return;
     var it = items.filter(function(x){ return x.id === editingId; })[0];
     var pid = it && it.photoId;
+    var rid = it && it.receiptId;
     items = items.filter(function(x){ return x.id !== editingId; });
     save();
     $("dlg").close();
     render();
     if (pid) delPhoto(pid);
+    // レシートは他の品も使っているかもしれないので、誰も使っていないときだけ消す
+    if (rid && !items.some(function(x){ return x.receiptId === rid; })) delPhoto(rid);
   });
 
   /* ---------- 上のボタン類 ---------- */
@@ -1067,7 +1224,11 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     var btn = $("expBtn"), label = btn.textContent;
     btn.disabled = true; btn.textContent = "準備中…";
     var photos = {};
-    var ids = items.map(function(i){ return i.photoId; }).filter(Boolean);
+    var ids = [];
+    items.forEach(function(i){
+      if (i.photoId && ids.indexOf(i.photoId) < 0) ids.push(i.photoId);
+      if (i.receiptId && ids.indexOf(i.receiptId) < 0) ids.push(i.receiptId);
+    });
     Promise.all(ids.map(function(id){
       return getPhoto(id).then(function(b){
         if (!b) return;
@@ -1114,6 +1275,230 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
       }).catch(function(){ alert("読み込みに失敗しました。"); });
     };
     fr.readAsText(f);
+  });
+
+  /* ---------- 選択肢のボタン（店・カテゴリ） ---------- */
+  function fillPicker(el, values, input){
+    if (!el) return;
+    if (!values.length){ el.innerHTML = ""; return; }
+    el.innerHTML = values.map(function(v){
+      return '<button type="button" data-v="' + esc(v) + '" aria-pressed="' + (input.value.trim() === v) + '">' + esc(v) + '</button>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function(b){
+      b.addEventListener("click", function(){
+        input.value = (input.value.trim() === b.dataset.v) ? "" : b.dataset.v;
+        fillPicker(el, values, input);
+      });
+    });
+  }
+
+  function unfilled(){
+    return items.filter(function(i){
+      return !i.name || i.price === null || i.price === undefined || i.price === "";
+    });
+  }
+
+  /* ---------- まとめて追加 ---------- */
+  var bulkPhotos = [];    // {blob, url}
+  var bulkReceipt = null; // {blob, url}
+
+  function renderBulkThumbs(){
+    var el = $("bulkThumbs");
+    el.innerHTML = bulkPhotos.map(function(p, i){
+      return '<div class="t"><img src="' + p.url + '" alt=""><button type="button" data-i="' + i + '" aria-label="この写真をやめる">✕</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function(b){
+      b.addEventListener("click", function(){
+        var i = Number(b.dataset.i);
+        URL.revokeObjectURL(bulkPhotos[i].url);
+        bulkPhotos.splice(i, 1);
+        renderBulkThumbs();
+        updateBulkButton();
+      });
+    });
+  }
+  function updateBulkButton(){
+    $("bulkSave").textContent = bulkPhotos.length ? (bulkPhotos.length + "枚をまとめて追加") : "まとめて追加";
+    $("bulkSave").disabled = bulkPhotos.length === 0;
+  }
+
+  $("bulkBtn").addEventListener("click", function(){
+    bulkPhotos.forEach(function(p){ URL.revokeObjectURL(p.url); });
+    bulkPhotos = [];
+    if (bulkReceipt) URL.revokeObjectURL(bulkReceipt.url);
+    bulkReceipt = null;
+    $("bulkThumbs").innerHTML = "";
+    $("bReceiptPrev").innerHTML = "";
+    $("bulkPhotos").value = "";
+    $("bReceipt").value = "";
+    $("bErr").hidden = true;
+    $("bulkProgress").textContent = "";
+    // 前回の店をあらかじめ入れておく（同じ店で続けて買うことが多いので）
+    var last = items[0];
+    $("bStore").value = last ? (last.store || "") : "";
+    $("bCat").value = "";
+    fillPicker($("bStorePicker"), uniq("store"), $("bStore"));
+    fillPicker($("bCatPicker"), uniq("cat"), $("bCat"));
+    updateBulkButton();
+    $("bulkDlg").showModal();
+  });
+  $("bulkClose").addEventListener("click", function(){ $("bulkDlg").close(); });
+
+  $("bulkPhotos").addEventListener("change", function(){
+    var files = Array.prototype.slice.call(this.files || []);
+    this.value = "";
+    if (!files.length) return;
+    $("bErr").hidden = true;
+    $("bulkProgress").textContent = "写真を読み込み中…";
+    var done = 0;
+    Promise.all(files.map(function(f){
+      return shrink(f).then(function(b){
+        bulkPhotos.push({ blob: b, url: URL.createObjectURL(b) });
+      }).catch(function(){}).then(function(){
+        done++;
+        $("bulkProgress").textContent = "写真を読み込み中… " + done + "/" + files.length;
+      });
+    })).then(function(){
+      $("bulkProgress").textContent = "";
+      renderBulkThumbs();
+      updateBulkButton();
+    });
+  });
+
+  $("bReceipt").addEventListener("change", function(){
+    var f = this.files && this.files[0];
+    this.value = "";
+    if (!f) return;
+    $("bulkProgress").textContent = "レシートを読み込み中…";
+    shrink(f, 2200, 0.82).then(function(b){
+      if (bulkReceipt) URL.revokeObjectURL(bulkReceipt.url);
+      bulkReceipt = { blob: b, url: URL.createObjectURL(b) };
+      $("bReceiptPrev").innerHTML = '<img src="' + bulkReceipt.url + '" alt="レシート">';
+      $("bulkProgress").textContent = "";
+    }).catch(function(){
+      $("bulkProgress").textContent = "";
+      $("bErr").textContent = "このレシート写真は読み込めませんでした。";
+      $("bErr").hidden = false;
+    });
+  });
+
+  $("bReceiptPrev").addEventListener("click", function(){
+    var img = $("bReceiptPrev").querySelector("img");
+    if (!img) return;
+    $("lbImg").src = img.src;
+    $("lb").showModal();
+  });
+
+  $("bulkSave").addEventListener("click", function(){
+    if (!bulkPhotos.length) return;
+    var btn = $("bulkSave");
+    btn.disabled = true;
+    $("bErr").hidden = true;
+
+    var store = $("bStore").value.trim();
+    var cat = $("bCat").value.trim();
+    var now = Date.now();
+    var newIds = [];
+
+    var receiptStep = bulkReceipt
+      ? (function(){ var rid = "r" + uid(); return putPhoto(rid, bulkReceipt.blob).then(function(){ return rid; }); })()
+      : Promise.resolve(null);
+
+    receiptStep.then(function(rid){
+      var i = 0;
+      function next(){
+        if (i >= bulkPhotos.length) return Promise.resolve();
+        $("bulkProgress").textContent = "保存中… " + (i+1) + "/" + bulkPhotos.length;
+        var p = bulkPhotos[i];
+        var pid = "p" + uid();
+        return putPhoto(pid, p.blob).then(function(){
+          var id = uid();
+          newIds.push(id);
+          items.push({
+            id: id, name: "", store: store, cat: cat, price: null, size: "", memo: "",
+            again: false, photoId: pid, receiptId: rid,
+            createdAt: now - i, updatedAt: now
+          });
+          i++;
+          return next();
+        });
+      }
+      return next();
+    }).then(function(){
+      items.sort(function(a,b){ return b.createdAt - a.createdAt; });
+      save();
+      bulkPhotos.forEach(function(p){ URL.revokeObjectURL(p.url); });
+      bulkPhotos = [];
+      if (bulkReceipt){ URL.revokeObjectURL(bulkReceipt.url); bulkReceipt = null; }
+      $("bulkProgress").textContent = "";
+      $("bulkDlg").close();
+      render();
+      openFill(newIds);
+    }).catch(function(){
+      $("bulkProgress").textContent = "";
+      $("bErr").textContent = "保存できませんでした。空き容量を確認してください。";
+      $("bErr").hidden = false;
+    }).then(function(){ btn.disabled = false; updateBulkButton(); });
+  });
+
+  /* ---------- まとめて入力 ---------- */
+  function openFill(ids){
+    var rows = ids && ids.length
+      ? ids.map(function(id){ return items.filter(function(x){ return x.id === id; })[0]; }).filter(Boolean)
+      : unfilled();
+    if (!rows.length) return;
+
+    $("fillTitle").textContent = "まとめて入力（" + rows.length + "件）";
+
+    var rid = null;
+    rows.some(function(r){ if (r.receiptId){ rid = r.receiptId; return true; } });
+    $("fillReceipt").hidden = !rid;
+    $("fillReceipt").onclick = function(){ if (rid) openLightboxById(rid); };
+
+    $("fillRows").innerHTML = rows.map(function(it){
+      var thumb = it.photoId
+        ? '<img data-pid="' + it.photoId + '" alt="">'
+        : '<span class="no">' + ICON.basket + '</span>';
+      return '<div class="fillrow">' +
+        '<button type="button" class="fthumb" data-fzoom="' + (it.photoId || "") + '">' + thumb + '</button>' +
+        '<div class="fcol">' +
+          '<input type="text" class="fname" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="名前（空でもOK）">' +
+          '<input type="number" inputmode="numeric" min="0" class="fprice" data-id="' + it.id + '" value="' +
+            (it.price === null || it.price === undefined ? "" : it.price) + '" placeholder="値段（円）">' +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    Array.prototype.forEach.call($("fillRows").querySelectorAll("img[data-pid]"), function(img){
+      photoURL(img.dataset.pid).then(function(u){ if (u) img.src = u; });
+    });
+    Array.prototype.forEach.call($("fillRows").querySelectorAll("[data-fzoom]"), function(b){
+      b.addEventListener("click", function(){ if (b.dataset.fzoom) openLightboxById(b.dataset.fzoom); });
+    });
+
+    $("fillDlg").showModal();
+  }
+
+  $("todoBtn").addEventListener("click", function(){ openFill(null); });
+  $("fillClose").addEventListener("click", function(){ $("fillDlg").close(); });
+
+  $("fillSave").addEventListener("click", function(){
+    var map = {};
+    items.forEach(function(it){ map[it.id] = it; });
+    Array.prototype.forEach.call($("fillRows").querySelectorAll(".fname"), function(inp){
+      var it = map[inp.dataset.id];
+      if (it) it.name = inp.value.trim();
+    });
+    Array.prototype.forEach.call($("fillRows").querySelectorAll(".fprice"), function(inp){
+      var it = map[inp.dataset.id];
+      if (!it) return;
+      var v = inp.value.trim();
+      it.price = v === "" ? null : Number(v);
+      it.updatedAt = Date.now();
+    });
+    save();
+    $("fillDlg").close();
+    render();
   });
 
   /* ---------- オフライン表示 ---------- */
