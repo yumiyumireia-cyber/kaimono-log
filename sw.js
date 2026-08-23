@@ -1,5 +1,5 @@
 /* また買うノート — オフライン用 */
-var VERSION = 'v1';
+var VERSION = 'v2';
 var SHELL   = 'kaimono-shell-' + VERSION;
 var RUNTIME = 'kaimono-runtime-' + VERSION;
 var ASSETS  = ['./', './index.html', './manifest.json',

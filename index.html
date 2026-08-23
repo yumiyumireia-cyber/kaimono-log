@@ -456,9 +456,9 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
         <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H7a4.5 4.5 0 0 1-.7-8.95A5.5 5.5 0 0 1 17.1 9.2 4.9 4.9 0 0 1 17.5 19Z"/></svg>
       </div>
       <div style="flex:1;min-width:0">
-        <div class="t">保存容量 <span id="useTxt">0 KB</span></div>
+        <div class="t">保存容量 <span id="useTxt">…</span></div>
         <div class="bar" id="bar"><span style="width:0%"></span></div>
-        <div class="s">この端末のブラウザに保存されています</div>
+        <div class="s">この端末の中に保存されています</div>
       </div>
     </div>
     <details>
@@ -472,10 +472,10 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
         </div>
       </summary>
       <div class="iobox">
-        <button class="mini" id="expBtn">今のデータをコピー</button>
-        <button class="mini" id="impBtn">貼り付けて読み込む</button>
-        <textarea id="io" placeholder="ここにバックアップの文字列が入ります／別の端末のデータを貼り付けて「貼り付けて読み込む」"></textarea>
-        <p class="hint">写真が多いと文字列がとても長くなります。端末を替えるときだけ使ってください。</p>
+        <button class="mini" id="expBtn">ファイルに書き出す</button>
+        <label class="mini" for="impFile" style="display:inline-block">ファイルから読み込む</label>
+        <input type="file" id="impFile" accept="application/json,.json" class="vh">
+        <p class="hint">写真ごと1つのファイルに書き出します。別の端末に移すときや、念のための控えに。<br>読み込むと、今のデータは置き換わります。</p>
       </div>
     </details>
   </div>
@@ -576,7 +576,9 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
   var KEY = "kaimono-again-v1";
   var items = [];
   var editingId = null;
-  var pendingPhoto = null;
+  var pendingBlob = null;      // 新しく選んだ写真（未保存）
+  var pendingPhotoId = null;   // すでに保存済みの写真ID
+  var urlCache = {};           // 写真ID -> 表示用URL
   var view = { tab:"all", store:null, cat:null, q:"", sort:"new" };
 
   var $ = function(id){ return document.getElementById(id); };
@@ -590,12 +592,85 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     character: '<img class="ch" src="' + ART + '" alt="">'
   };
 
-  /* ---------- storage ---------- */
+  /* ---------- 写真の保管庫（IndexedDB） ---------- */
+  var DB = null;
+  function idb(){
+    return new Promise(function(res, rej){
+      if (DB) return res(DB);
+      if (!window.indexedDB) return rej(new Error("no-idb"));
+      var done = false;
+      // 応答が返らない環境でも固まらないように保険をかける
+      var timer = setTimeout(function(){
+        if (!done){ done = true; rej(new Error("idb-timeout")); }
+      }, 8000);
+      var r;
+      try{ r = indexedDB.open("kaimono", 1); }
+      catch(e){ clearTimeout(timer); return rej(e); }
+      r.onupgradeneeded = function(){
+        var d = r.result;
+        if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos");
+      };
+      r.onsuccess = function(){
+        if (done) { r.result.close(); return; }
+        done = true; clearTimeout(timer); DB = r.result; res(DB);
+      };
+      r.onerror = function(){
+        if (done) return;
+        done = true; clearTimeout(timer); rej(r.error || new Error("idb-error"));
+      };
+      r.onblocked = function(){
+        if (done) return;
+        done = true; clearTimeout(timer); rej(new Error("idb-blocked"));
+      };
+    });
+  }
+  function putPhoto(id, blob){
+    return idb().then(function(d){
+      return new Promise(function(res, rej){
+        var t = d.transaction("photos", "readwrite");
+        t.objectStore("photos").put(blob, id);
+        t.oncomplete = function(){ res(id); };
+        t.onerror = function(){ rej(t.error); };
+      });
+    });
+  }
+  function getPhoto(id){
+    if (!id) return Promise.resolve(null);
+    return idb().then(function(d){
+      return new Promise(function(res, rej){
+        var q = d.transaction("photos", "readonly").objectStore("photos").get(id);
+        q.onsuccess = function(){ res(q.result || null); };
+        q.onerror = function(){ rej(q.error); };
+      });
+    });
+  }
+  function delPhoto(id){
+    if (!id) return Promise.resolve();
+    if (urlCache[id]) { URL.revokeObjectURL(urlCache[id]); delete urlCache[id]; }
+    return idb().then(function(d){
+      return new Promise(function(res){
+        var t = d.transaction("photos", "readwrite");
+        t.objectStore("photos").delete(id);
+        t.oncomplete = res; t.onerror = res;
+      });
+    });
+  }
+  function photoURL(id){
+    if (!id) return Promise.resolve(null);
+    if (urlCache[id]) return Promise.resolve(urlCache[id]);
+    return getPhoto(id).then(function(b){
+      if (!b) return null;
+      urlCache[id] = URL.createObjectURL(b);
+      return urlCache[id];
+    }).catch(function(){ return null; });
+  }
+
+  /* ---------- メモ本体（localStorage） ---------- */
   function load(){
     try{
       var raw = localStorage.getItem(KEY);
       items = raw ? JSON.parse(raw) : [];
-      if(!Array.isArray(items)) items = [];
+      if (!Array.isArray(items)) items = [];
     }catch(e){ items = []; }
   }
   function save(){
@@ -603,20 +678,36 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
       localStorage.setItem(KEY, JSON.stringify(items));
       return true;
     }catch(e){
-      alert("保存できませんでした。ブラウザの保存容量がいっぱいです。\n古いものを削除するか、写真なしで登録してください。");
+      alert("保存できませんでした。ブラウザの空き容量が足りないようです。\n古いものをいくつか削除してみてください。");
       return false;
     }
   }
-  function usage(){
-    var bytes = 0;
-    try{ bytes = new Blob([localStorage.getItem(KEY) || ""]).size; }catch(e){}
-    return bytes;
+
+  /* 前の版（写真を文字にして保存していた）から引っ越す */
+  function migratePhotos(){
+    var olds = items.filter(function(i){ return i.photo; });
+    if (!olds.length) return Promise.resolve(false);
+    return Promise.all(olds.map(function(it){
+      return fetch(it.photo).then(function(r){ return r.blob(); }).then(function(b){
+        var id = "p" + uid();
+        return putPhoto(id, b).then(function(){ it.photoId = id; delete it.photo; });
+      }).catch(function(){ delete it.photo; });
+    })).then(function(){ save(); return true; });
   }
 
-  /* ---------- helpers ---------- */
-  function uid(){ return "i" + Date.now().toString(36) + Math.floor(Math.random()*1e6).toString(36); }
+  /* ---------- 小道具 ---------- */
+  function uid(){ return Date.now().toString(36) + Math.floor(Math.random()*1e6).toString(36); }
   function yen(n){ return "¥" + Number(n).toLocaleString("ja-JP"); }
   function fmtDate(ts){ var d = new Date(ts); return (d.getMonth()+1) + "/" + d.getDate(); }
+  function stamp(){
+    var d = new Date(), p = function(n){ return (n<10?"0":"") + n; };
+    return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate());
+  }
+  function fmtBytes(b){
+    if (b >= 1073741824) return (b/1073741824).toFixed(1) + " GB";
+    if (b >= 1048576) return (b/1048576).toFixed(1) + " MB";
+    return Math.round(b/1024) + " KB";
+  }
   function esc(s){
     return String(s).replace(/[&<>"']/g, function(c){
       return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
@@ -626,30 +717,38 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     var seen = {}, out = [];
     items.forEach(function(it){
       var v = (it[key] || "").trim();
-      if(v && !seen[v]){ seen[v] = 1; out.push(v); }
+      if (v && !seen[v]){ seen[v] = 1; out.push(v); }
     });
     return out.sort(function(a,b){ return a.localeCompare(b, "ja"); });
   }
+  function blobToDataURL(b){
+    return new Promise(function(res){
+      var fr = new FileReader();
+      fr.onload = function(){ res(fr.result); };
+      fr.onerror = function(){ res(null); };
+      fr.readAsDataURL(b);
+    });
+  }
 
-  /* ---------- lightbox ---------- */
-  function openLightbox(src){
-    if(!src) return;
-    $("lbImg").src = src;
-    $("lb").showModal();
+  /* ---------- 写真を拡大 ---------- */
+  function openLightboxById(id){
+    photoURL(id).then(function(u){
+      if (!u) return;
+      $("lbImg").src = u;
+      $("lb").showModal();
+    });
   }
   $("lbClose").addEventListener("click", function(){ $("lb").close(); });
-  $("lbIn").addEventListener("click", function(e){
-    if(e.target.id !== "lbImg") $("lb").close();
-  });
+  $("lbIn").addEventListener("click", function(e){ if (e.target.id !== "lbImg") $("lb").close(); });
   $("lbImg").addEventListener("click", function(){ $("lb").close(); });
 
-  /* ---------- photo ---------- */
+  /* ---------- 写真を小さくする ---------- */
   function shrink(file){
     return new Promise(function(resolve, reject){
       var url = URL.createObjectURL(file);
       var img = new Image();
       img.onload = function(){
-        var max = 1000;
+        var max = 1400;
         var w = img.naturalWidth, h = img.naturalHeight;
         var s = Math.min(1, max / Math.max(w, h));
         var cv = document.createElement("canvas");
@@ -657,30 +756,29 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
         cv.height = Math.round(h * s);
         cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
         URL.revokeObjectURL(url);
-        try{ resolve(cv.toDataURL("image/jpeg", 0.66)); }
-        catch(e){ reject(e); }
+        cv.toBlob(function(b){ b ? resolve(b) : reject(new Error("変換できません")); }, "image/jpeg", 0.72);
       };
       img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("読み込めません")); };
       img.src = url;
     });
   }
 
-  /* ---------- render ---------- */
+  /* ---------- 一覧 ---------- */
   function filtered(){
     var q = view.q.trim().toLowerCase();
     var out = items.filter(function(it){
-      if(view.tab === "again" && !it.again) return false;
-      if(view.store && (it.store || "").trim() !== view.store) return false;
-      if(view.cat && (it.cat || "").trim() !== view.cat) return false;
-      if(q){
+      if (view.tab === "again" && !it.again) return false;
+      if (view.store && (it.store || "").trim() !== view.store) return false;
+      if (view.cat && (it.cat || "").trim() !== view.cat) return false;
+      if (q){
         var hay = ((it.name||"") + " " + (it.memo||"") + " " + (it.store||"") + " " + (it.cat||"") + " " + (it.size||"")).toLowerCase();
-        if(hay.indexOf(q) === -1) return false;
+        if (hay.indexOf(q) === -1) return false;
       }
       return true;
     });
     out.sort(function(a,b){
-      if(view.sort === "new") return b.createdAt - a.createdAt;
-      if(view.sort === "old") return a.createdAt - b.createdAt;
+      if (view.sort === "new") return b.createdAt - a.createdAt;
+      if (view.sort === "old") return a.createdAt - b.createdAt;
       var pa = (a.price === null || a.price === undefined) ? -1 : a.price;
       var pb = (b.price === null || b.price === undefined) ? -1 : b.price;
       return view.sort === "high" ? pb - pa : pa - pb;
@@ -689,7 +787,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
   }
 
   function chipRow(el, label, values, current, onPick){
-    if(!values.length){ el.innerHTML = ""; return; }
+    if (!values.length){ el.innerHTML = ""; return; }
     var html = '<span class="filter-label">' + label + '</span>';
     html += '<button class="chip" data-v="" aria-pressed="' + (current === null) + '">すべて</button>';
     values.forEach(function(v){
@@ -713,27 +811,31 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     var rows = filtered();
     var list = $("list");
 
-    if(!rows.length){
-      list.innerHTML = '<div class="empty"><div class="empty-in">' +
-        ICON.character +
+    if (!rows.length){
+      list.innerHTML = '<div class="empty"><div class="empty-in">' + ICON.character +
         (items.length === 0
           ? '<p class="big">まだ何もありません</p><p>右上の『＋ 追加』から、<br>買ったものを登録できます。</p>'
           : '<p class="big">見つかりませんでした</p><p>絞り込みを「すべて」に<br>戻してみてください。</p>') +
         '</div></div>';
     } else {
       list.innerHTML = rows.map(function(it){
-        var thumb = it.photo
-          ? '<img class="thumb" src="' + it.photo + '" alt="' + esc(it.name) + 'の写真"><span class="zoom">' + ICON.zoom + '</span>'
-          : '<div class="thumb thumb-none">' + ICON.basket + '</div>';
+        var thumb;
+        if (it.photoId){
+          var cached = urlCache[it.photoId];
+          thumb = '<img class="thumb" data-pid="' + it.photoId + '"' + (cached ? ' src="' + cached + '"' : '') +
+                  ' alt="' + esc(it.name) + 'の写真"><span class="zoom">' + ICON.zoom + '</span>';
+        } else {
+          thumb = '<div class="thumb thumb-none">' + ICON.basket + '</div>';
+        }
         var tags = "";
-        if(it.store) tags += '<span class="tag store">' + esc(it.store) + '</span>';
-        if(it.cat) tags += '<span class="tag">' + esc(it.cat) + '</span>';
+        if (it.store) tags += '<span class="tag store">' + esc(it.store) + '</span>';
+        if (it.cat) tags += '<span class="tag">' + esc(it.cat) + '</span>';
         var nums = "";
-        if(it.price !== null && it.price !== undefined && it.price !== "") nums += '<span class="price">' + yen(it.price) + '</span>';
-        if(it.size) nums += '<span>' + esc(it.size) + '</span>';
+        if (it.price !== null && it.price !== undefined && it.price !== "") nums += '<span class="price">' + yen(it.price) + '</span>';
+        if (it.size) nums += '<span>' + esc(it.size) + '</span>';
         return '<article class="card' + (it.again ? " is-again" : "") + '">' +
           '<div class="cardtop">' +
-            '<button class="thumb-btn" data-zoom="' + it.id + '"' + (it.photo ? ' aria-label="写真を拡大"' : ' aria-hidden="true" tabindex="-1"') + '>' + thumb + '</button>' +
+            '<button class="thumb-btn" data-zoom="' + it.id + '"' + (it.photoId ? ' aria-label="写真を拡大"' : ' aria-hidden="true" tabindex="-1"') + '>' + thumb + '</button>' +
             '<button class="cardmain" data-edit="' + it.id + '">' +
               '<h3 class="name">' + esc(it.name) + '</h3>' +
               (tags ? '<div class="meta">' + tags + '</div>' : "") +
@@ -748,6 +850,10 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
           '</div>' +
         '</article>';
       }).join("");
+
+      Array.prototype.forEach.call(list.querySelectorAll("img[data-pid]:not([src])"), function(img){
+        photoURL(img.dataset.pid).then(function(u){ if (u) img.src = u; });
+      });
     }
 
     Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function(b){
@@ -756,36 +862,49 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     Array.prototype.forEach.call(list.querySelectorAll("[data-zoom]"), function(b){
       b.addEventListener("click", function(){
         var it = items.filter(function(x){ return x.id === b.dataset.zoom; })[0];
-        if(it && it.photo) openLightbox(it.photo);
-        else if(it) openDialog(it.id);
+        if (it && it.photoId) openLightboxById(it.photoId);
+        else if (it) openDialog(it.id);
       });
     });
     Array.prototype.forEach.call(list.querySelectorAll("[data-again]"), function(b){
       b.addEventListener("click", function(){
         var it = items.filter(function(x){ return x.id === b.dataset.again; })[0];
-        if(!it) return;
+        if (!it) return;
         it.again = !it.again;
         it.updatedAt = Date.now();
-        if(save()) render();
+        if (save()) render();
       });
     });
 
-    var bytes = usage();
-    var limit = 5 * 1024 * 1024;
-    var pct = Math.min(100, Math.round(bytes / limit * 1000) / 10);
-    $("useTxt").textContent = (bytes > 1048576 ? (bytes/1048576).toFixed(1) + " MB" : Math.round(bytes/1024) + " KB") + " / 約5MB";
-    $("bar").classList.toggle("warn", pct > 70);
-    $("bar").firstElementChild.style.width = Math.max(1, pct) + "%";
-
+    updateUsage();
     $("storeList").innerHTML = uniq("store").map(function(v){ return '<option value="' + esc(v) + '">'; }).join("");
     $("catList").innerHTML = uniq("cat").map(function(v){ return '<option value="' + esc(v) + '">'; }).join("");
   }
 
-  /* ---------- dialog ---------- */
-  function setPhotoPreview(src){
+  /* ---------- 保存容量 ---------- */
+  function updateUsage(){
+    var bar = $("bar");
+    if (navigator.storage && navigator.storage.estimate){
+      navigator.storage.estimate().then(function(e){
+        var used = e.usage || 0, quota = e.quota || 0;
+        $("useTxt").textContent = fmtBytes(used) + (quota ? "　あと約 " + fmtBytes(Math.max(0, quota - used)) : "");
+        var pct = quota ? (used / quota * 100) : 0;
+        bar.classList.toggle("warn", pct > 70);
+        bar.firstElementChild.style.width = Math.max(1, Math.min(100, pct)) + "%";
+      }).catch(function(){ $("useTxt").textContent = ""; });
+    } else {
+      var b = 0;
+      try{ b = new Blob([localStorage.getItem(KEY) || ""]).size; }catch(e){}
+      $("useTxt").textContent = fmtBytes(b);
+      bar.firstElementChild.style.width = "1%";
+    }
+  }
+
+  /* ---------- 追加・編集 ---------- */
+  function setPhotoPreview(url){
     var box = $("prevBox");
-    if(src){
-      box.innerHTML = '<img src="' + src + '" alt="選んだ写真">';
+    if (url){
+      box.innerHTML = '<img src="' + url + '" alt="選んだ写真">';
       box.setAttribute("aria-label", "写真を拡大");
       $("photoHint").textContent = "写真をタップすると大きく見られます。";
     } else {
@@ -810,50 +929,75 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     $("fSize").value = it ? (it.size || "") : "";
     $("fMemo").value = it ? (it.memo || "") : "";
     setAgain(it ? it.again : false);
-    pendingPhoto = it ? (it.photo || null) : null;
-    setPhotoPreview(pendingPhoto);
+    pendingBlob = null;
+    pendingPhotoId = it ? (it.photoId || null) : null;
+    setPhotoPreview(null);
+    if (pendingPhotoId) photoURL(pendingPhotoId).then(function(u){ if (u) setPhotoPreview(u); });
     $("photo").value = "";
     $("delBtn").hidden = !it;
     $("err").hidden = true;
+    $("saveBtn").disabled = false;
+    $("saveBtn").textContent = "保存する";
     $("dlg").showModal();
-    if(!it) setTimeout(function(){ $("fName").focus(); }, 50);
+    if (!it) setTimeout(function(){ $("fName").focus(); }, 50);
   }
 
   $("addBtn").addEventListener("click", function(){ openDialog(null); });
   $("closeBtn").addEventListener("click", function(){ $("dlg").close(); });
-  $("prevBox").addEventListener("click", function(){ openLightbox(pendingPhoto); });
+  $("prevBox").addEventListener("click", function(){
+    var img = $("prevBox").querySelector("img");
+    if (!img) return;
+    $("lbImg").src = img.src;
+    $("lb").showModal();
+  });
 
   $("fAgain").addEventListener("click", function(){
     setAgain($("fAgain").getAttribute("aria-checked") !== "true");
   });
 
+  /* 写真の準備中は保存させない（押せてしまうと写真なしで保存されてしまう） */
+  function setPhotoBusy(on){
+    $("saveBtn").disabled = !!on;
+    $("saveBtn").textContent = on ? "写真を準備中…" : "保存する";
+    if (on) $("photoHint").textContent = "写真を読み込んでいます…";
+  }
+
   $("photo").addEventListener("change", function(){
     var f = $("photo").files && $("photo").files[0];
-    if(!f) return;
+    if (!f) return;
     $("err").hidden = true;
-    shrink(f).then(function(data){
-      pendingPhoto = data;
-      setPhotoPreview(data);
+    setPhotoBusy(true);
+    shrink(f).then(function(blob){
+      pendingBlob = blob;
+      setPhotoBusy(false);
+      setPhotoPreview(URL.createObjectURL(blob));
     }).catch(function(){
+      setPhotoBusy(false);
+      setPhotoPreview(pendingBlob || pendingPhotoId ? null : null);
       $("err").textContent = "この写真は読み込めませんでした。別の写真を選ぶか、写真なしで保存してください。";
       $("err").hidden = false;
     });
   });
 
   $("rmPhoto").addEventListener("click", function(){
-    pendingPhoto = null;
+    pendingBlob = null;
+    pendingPhotoId = null;
     $("photo").value = "";
     setPhotoPreview(null);
   });
 
   $("saveBtn").addEventListener("click", function(){
     var name = $("fName").value.trim();
-    if(!name){
+    if (!name){
       $("err").textContent = "名前を入れてください。";
       $("err").hidden = false;
       $("fName").focus();
       return;
     }
+    var btn = $("saveBtn");
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+
     var priceRaw = $("fPrice").value.trim();
     var data = {
       name: name,
@@ -863,61 +1007,113 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
       size: $("fSize").value.trim(),
       memo: $("fMemo").value,
       again: $("fAgain").getAttribute("aria-checked") === "true",
-      photo: pendingPhoto,
       updatedAt: Date.now()
     };
-    var snapshot = JSON.stringify(items);
-    if(editingId){
-      items = items.map(function(x){
-        return x.id === editingId ? Object.assign({}, x, data) : x;
+    var old = editingId ? items.filter(function(x){ return x.id === editingId; })[0] : null;
+    var oldPid = old ? (old.photoId || null) : null;
+
+    var photoStep;
+    if (pendingBlob){
+      var newId = "p" + uid();
+      photoStep = putPhoto(newId, pendingBlob).then(function(){
+        data.photoId = newId;
+        if (oldPid) return delPhoto(oldPid);
       });
     } else {
-      data.id = uid();
-      data.createdAt = Date.now();
-      items.unshift(data);
+      data.photoId = pendingPhotoId;
+      photoStep = (oldPid && !pendingPhotoId) ? delPhoto(oldPid) : Promise.resolve();
     }
-    if(save()){
+
+    photoStep.then(function(){
+      if (editingId){
+        items = items.map(function(x){ return x.id === editingId ? Object.assign({}, x, data) : x; });
+      } else {
+        data.id = uid();
+        data.createdAt = Date.now();
+        items.unshift(data);
+      }
+      save();
       $("dlg").close();
       render();
-    } else {
-      items = JSON.parse(snapshot);
-    }
+    }).catch(function(e){
+      var msg = (e && (e.message === "idb-timeout" || e.message === "no-idb" || e.message === "idb-blocked"))
+        ? "この画面では写真を保存できませんでした。プライベートブラウズを使っている場合は、通常の画面で開いてみてください。"
+        : "写真を保存できませんでした。空き容量を確認してください。";
+      $("err").textContent = msg;
+      $("err").hidden = false;
+    }).then(function(){ btn.disabled = false; btn.textContent = "保存する"; });
   });
 
   $("delBtn").addEventListener("click", function(){
-    if(!editingId) return;
-    if(!confirm("この記録を削除します。よろしいですか？")) return;
+    if (!editingId) return;
+    if (!confirm("この記録を削除します。よろしいですか？")) return;
+    var it = items.filter(function(x){ return x.id === editingId; })[0];
+    var pid = it && it.photoId;
     items = items.filter(function(x){ return x.id !== editingId; });
     save();
     $("dlg").close();
     render();
+    if (pid) delPhoto(pid);
   });
 
-  /* ---------- tools ---------- */
+  /* ---------- 上のボタン類 ---------- */
   $("tabAll").addEventListener("click", function(){ view.tab = "all"; render(); });
   $("tabAgain").addEventListener("click", function(){ view.tab = "again"; render(); });
   $("q").addEventListener("input", function(){ view.q = $("q").value; render(); });
   $("sort").addEventListener("change", function(){ view.sort = $("sort").value; render(); });
 
+  /* ---------- バックアップ（ファイルで出し入れ） ---------- */
   $("expBtn").addEventListener("click", function(){
-    var txt = JSON.stringify(items);
-    $("io").value = txt;
-    $("io").select();
-    if(navigator.clipboard) navigator.clipboard.writeText(txt).catch(function(){});
-    alert("コピーしました（下の枠にも入っています）。メモアプリなどに貼って保管してください。");
+    var btn = $("expBtn"), label = btn.textContent;
+    btn.disabled = true; btn.textContent = "準備中…";
+    var photos = {};
+    var ids = items.map(function(i){ return i.photoId; }).filter(Boolean);
+    Promise.all(ids.map(function(id){
+      return getPhoto(id).then(function(b){
+        if (!b) return;
+        return blobToDataURL(b).then(function(d){ if (d) photos[id] = d; });
+      });
+    })).then(function(){
+      var blob = new Blob([JSON.stringify({ v:2, items: items, photos: photos })], { type:"application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "また買うノート_" + stamp() + ".json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 8000);
+    }).catch(function(){
+      alert("書き出せませんでした。");
+    }).then(function(){
+      btn.disabled = false; btn.textContent = label;
+    });
   });
 
-  $("impBtn").addEventListener("click", function(){
-    var txt = $("io").value.trim();
-    if(!txt){ alert("枠にバックアップの文字列を貼り付けてから押してください。"); return; }
-    var parsed;
-    try{ parsed = JSON.parse(txt); }catch(e){ alert("読み込めませんでした。文字列が途中で切れていないか確認してください。"); return; }
-    if(!Array.isArray(parsed)){ alert("この文字列はバックアップの形になっていません。"); return; }
-    if(!confirm("今のデータを、貼り付けた内容で置き換えます。よろしいですか？")) return;
-    var snapshot = items;
-    items = parsed;
-    if(save()){ $("io").value = ""; render(); }
-    else { items = snapshot; }
+  $("impFile").addEventListener("change", function(){
+    var f = this.files && this.files[0];
+    this.value = "";
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function(){
+      var data;
+      try{ data = JSON.parse(fr.result); }catch(e){ alert("このファイルは読み込めませんでした。"); return; }
+      var list = Array.isArray(data) ? data : (data && data.items);
+      if (!Array.isArray(list)){ alert("バックアップのファイルではないようです。"); return; }
+      if (!confirm("今のデータを、選んだファイルの内容で置き換えます。よろしいですか？")) return;
+      var photos = (data && data.photos) || {};
+      Promise.all(Object.keys(photos).map(function(id){
+        return fetch(photos[id]).then(function(r){ return r.blob(); }).then(function(b){ return putPhoto(id, b); }).catch(function(){});
+      })).then(function(){
+        items = list;
+        return migratePhotos();
+      }).then(function(){
+        save();
+        urlCache = {};
+        render();
+        alert("読み込みました。");
+      }).catch(function(){ alert("読み込みに失敗しました。"); });
+    };
+    fr.readAsText(f);
   });
 
   /* ---------- オフライン表示 ---------- */
@@ -930,6 +1126,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
 
   load();
   render();
+  migratePhotos().then(function(moved){ if (moved) render(); });
 })();
 
 /* ---------- 電波が無くても開けるようにする ---------- */
