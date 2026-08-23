@@ -111,7 +111,7 @@ svg{flex:none}
 .topbar{max-width:640px;margin:0 auto;padding:16px 16px 0;display:flex;flex-direction:column;gap:6px}
 .brandrow{display:flex;align-items:center;gap:14px}
 .mark{width:clamp(92px, 28vw, 132px);height:auto;flex:none}
-.addrow{display:flex;justify-content:flex-end;margin-top:-4px}
+.addrow{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:-4px;flex-wrap:wrap}
 .brand{flex:1;min-width:0}
 .brand h1{
   margin:0;font-size:29px;font-weight:700;letter-spacing:.02em;
@@ -136,6 +136,14 @@ svg{flex:none}
 .tools{display:flex;flex-direction:column;gap:12px;padding:16px 0 2px}
 .searchbox{position:relative;width:100%}
 .sortrow{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:2px}
+.offline{
+  display:none;align-items:center;gap:8px;margin-right:auto;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:8px 16px;font-size:14.5px;font-weight:700;color:var(--ink-soft);
+  box-shadow:var(--shadow);
+}
+.offline.show{display:inline-flex}
+.offline .dot{width:9px;height:9px;border-radius:50%;background:var(--orange);flex:none}
 .sortrow .lb{font-size:15px;font-weight:700;letter-spacing:.1em;color:var(--ink-faint)}
 .searchbox svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--blue);pointer-events:none}
 .search{
@@ -400,6 +408,7 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     </div>
   </div>
   <div class="addrow">
+    <span class="offline" id="offlineBadge"><span class="dot"></span>オフライン中（そのまま使えます）</span>
     <button class="btn-add" id="addBtn">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       追加
@@ -911,7 +920,22 @@ dialog::backdrop{background:rgba(8,26,45,.55);backdrop-filter:blur(3px)}
     else { items = snapshot; }
   });
 
+  /* ---------- オフライン表示 ---------- */
+  function updateOnline(){
+    $("offlineBadge").classList.toggle("show", !navigator.onLine);
+  }
+  window.addEventListener("online", updateOnline);
+  window.addEventListener("offline", updateOnline);
+  updateOnline();
+
   load();
   render();
 })();
+
+/* ---------- 電波が無くても開けるようにする ---------- */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){ /* 使えない環境では何もしない */ });
+  });
+}
 </script>
