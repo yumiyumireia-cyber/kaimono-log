@@ -1,0 +1,30 @@
+{
+  "name": "また買うノート",
+  "short_name": "また買うノート",
+  "description": "買ったものを写真つきで記録して、「また買う」だけをすぐ呼び出せるノート",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#CFE4FA",
+  "theme_color": "#CFE4FA",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
